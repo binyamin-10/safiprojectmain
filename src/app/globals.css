@@ -1,0 +1,136 @@
+@import "tailwindcss";
+
+@theme {
+  /* Backgrounds and Panels */
+  --color-slate-950: #F0FAF5;
+  --color-slate-900: #FFFFFF;
+  --color-slate-800: #D2E6DF;
+  --color-slate-700: #A3DDC8;
+
+  /* Text colors mapped from dark-to-light representation */
+  --color-slate-50: #0f172a;
+  --color-slate-100: #0f172a;
+  --color-slate-200: #1e293b;
+  --color-slate-300: #334155;
+  --color-slate-400: #2E6C56;
+  --color-slate-500: #475569;
+  --color-slate-600: #64748b;
+
+  /* Primary brand accents - vibrant emerald greens */
+  --color-indigo-600: #0D7F58;
+  --color-indigo-500: #0B6A4A;
+  --color-indigo-400: #0D7F58;
+  --color-indigo-300: #A3DDC8;
+
+  --color-rose-600: #0D7F58;
+  --color-rose-500: #0B6A4A;
+  --color-rose-400: #0D7F58;
+  --color-rose-300: #A3DDC8;
+
+  /* Vibrant success / lime green accents */
+  --color-emerald-600: #1BD488;
+  --color-emerald-500: #1BD488;
+  --color-emerald-400: #1BD488;
+}
+
+:root {
+  --background: #F0FAF5;
+  --foreground: #0f172a;
+  --primary: #0D7F58;
+  --primary-hover: #0B6A4A;
+  --accent: #1BD488;
+  --glass-bg: rgba(255, 255, 255, 0.90);
+  --glass-border: #D2E6DF;
+}
+
+body {
+  background-color: #F0FAF5;
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(27, 212, 136, 0.08) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, rgba(13, 127, 88, 0.06) 0px, transparent 50%),
+    radial-gradient(at 50% 100%, rgba(16, 185, 129, 0.04) 0px, transparent 50%),
+    linear-gradient(rgba(13, 127, 88, 0.12) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(13, 127, 88, 0.12) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 100% 100%, 24px 24px, 24px 24px;
+  color: var(--foreground);
+  min-height: 100vh;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Glass panel enhancements with smooth scale & lift */
+.glass-panel {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 4px 20px 0 rgba(13, 127, 88, 0.08);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.glass-panel:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px 0 rgba(13, 127, 88, 0.12), 0 2px 8px 0 rgba(27, 212, 136, 0.04);
+  border-color: #A3DDC8;
+}
+
+/* Elegant custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #D2E6DF;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #A3DDC8;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Inputs and Forms: Modern Focus Indicator */
+input, select, textarea {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+input:focus, select:focus, textarea:focus {
+  border-color: #0D7F58 !important;
+  box-shadow: 0 0 0 3px rgba(13, 127, 88, 0.15) !important;
+  outline: none;
+}
+
+/* Button Micro-interactions */
+button, a {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+button:active, a:active {
+  transform: scale(0.97);
+}
+
+/* Subtle fade-in animation for load */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+main, .auth-card {
+  animation: fadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}

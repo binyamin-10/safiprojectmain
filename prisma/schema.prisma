@@ -1,0 +1,54 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id           String           @id @default(uuid())
+  registerNo   String           @unique
+  name         String
+  password     String
+  role         String           @default("STUDENT") // STUDENT or ADMIN
+  batch        String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  semesters    SemesterReport[]
+}
+
+model SemesterReport {
+  id             String         @id @default(uuid())
+  semesterNumber Int
+  sgpa           Float
+  cgpa           Float
+  overallGrade   String
+  status         String         @default("Pass") // Pass or Fail
+  fileName       String?
+  fileUrl        String?
+  isVerified     Boolean        @default(false)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  userId         String
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subjects       SubjectGrade[]
+
+  @@unique([userId, semesterNumber])
+}
+
+model SubjectGrade {
+  id               String         @id @default(uuid())
+  subjectCode      String
+  subjectName      String
+  grade            String
+  gradePoint       Float
+  credits          Float
+  creditPoint      Float
+  status           String         @default("Pass") // Pass or Fail
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  semesterReportId String
+  semesterReport   SemesterReport @relation(fields: [semesterReportId], references: [id], onDelete: Cascade)
+}
