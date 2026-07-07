@@ -47,7 +47,7 @@ function getGradePoint(grade: string): number {
 
 // Matches a Calicut University course code: e.g. BCA1CJ101, ENG1FA101(2), PHY1FM105
 const CODE_RE = /([A-Z]{2,5}\d[A-Z]{0,3}\d{2,3}(?:\(\d+\))?)/;
-const CODE_AT_START_RE = /^([A-Z]{2,5}\d[A-Z]{0,3}\d{2,3}(?:\(\d+\))?)/;
+const CODE_AT_START_RE = /^([A-Z]{2,5}\d[A-Z]{0,3}\d{2,3}(?:\(\d+\))?)(?:\b|\s*-)/;
 
 // Lines that are structural headers/footers and NOT subject data
 const SKIP_RE =
@@ -184,10 +184,13 @@ export async function processMarksheetOCR(
   if (isPDF) {
     try {
       console.log("[OCR] PDF detected — extracting text directly...");
-      // Using internal require to prevent Turbopack from crashing on the buggy index.js file
-      const pdfParse = require("pdf-parse/lib/pdf-parse.js");
-      const result = await pdfParse(imageBuffer);
-      text = result.text || "";
+      // Using unpdf (modern pdf.js wrapper) to prevent Vercel canvas crashes while preserving accurate text format
+      const { extractText } = await import("unpdf");
+      const { text: extracted } = await extractText(imageBuffer);
+      text = typeof extracted === 'string' ? extracted : (extracted?.join?.('\n') || "");
+
+      console.log("[OCR] Raw text (first 1000 chars):", JSON.stringify(text.substring(0, 1000)));
+      console.log("[OCR] Raw text length:", text.length);
 
       // Check if this is an image-only PDF (no selectable text layer)
       if (text.trim().length < 50 || (!text.toLowerCase().includes("grade") && !text.toLowerCase().includes("sgpa"))) {

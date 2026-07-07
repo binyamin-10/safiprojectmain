@@ -29,6 +29,7 @@
     "react-dom": "^19.0.0",
     "recharts": "^3.9.2",
     "tesseract.js": "^7.0.0",
+    "unpdf": "^1.6.2",
     "ws": "^8.21.0"
   },
   "devDependencies": {
