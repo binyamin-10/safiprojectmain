@@ -186,7 +186,8 @@ export async function processMarksheetOCR(
       console.log("[OCR] PDF detected — extracting text directly...");
       // Using unpdf (modern pdf.js wrapper) to prevent Vercel canvas crashes while preserving accurate text format
       const { extractText } = await import("unpdf");
-      const { text: extracted } = await extractText(imageBuffer);
+      const uint8 = new Uint8Array(imageBuffer.buffer, imageBuffer.byteOffset, imageBuffer.byteLength);
+      const { text: extracted } = await extractText(uint8);
       text = typeof extracted === 'string' ? extracted : (extracted?.join?.('\n') || "");
 
       console.log("[OCR] Raw text (first 1000 chars):", JSON.stringify(text.substring(0, 1000)));
