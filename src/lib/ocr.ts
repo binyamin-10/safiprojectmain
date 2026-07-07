@@ -184,8 +184,8 @@ export async function processMarksheetOCR(
   if (isPDF) {
     try {
       console.log("[OCR] PDF detected — extracting text directly...");
-      // Using standard require to prevent Turbopack from bundling it incorrectly
-      const pdfParse = require("pdf-parse");
+      // Using internal require to prevent Turbopack from crashing on the buggy index.js file
+      const pdfParse = require("pdf-parse/lib/pdf-parse.js");
       const result = await pdfParse(imageBuffer);
       text = result.text || "";
 
