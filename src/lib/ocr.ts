@@ -183,11 +183,20 @@ export async function processMarksheetOCR(
 
   if (isPDF) {
     try {
-      console.log("[OCR] PDF detected — extracting text directly...");
-      const { PDFParse } = await import("pdf-parse");
-      const parser = new PDFParse(new Uint8Array(imageBuffer));
-      const result = await parser.getText();
-      text = result.text || "";
+      console.log("[OCR] PDF detected — extracting text directly using pdf2json...");
+      
+      const { default: PDFParser } = await import("pdf2json");
+      
+      text = await new Promise<string>((resolve, reject) => {
+        const pdfParser = new PDFParser(null, 1);
+        
+        pdfParser.on("pdfParser_dataError", (errData) => reject(errData.parserError));
+        pdfParser.on("pdfParser_dataReady", () => {
+          resolve(pdfParser.getRawTextContent());
+        });
+        
+        pdfParser.parseBuffer(imageBuffer);
+      });
 
       // Check if this is an image-only PDF (no selectable text layer)
       if (text.trim().length < 50 || (!text.toLowerCase().includes("grade") && !text.toLowerCase().includes("sgpa"))) {
