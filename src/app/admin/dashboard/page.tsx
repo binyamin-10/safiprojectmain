@@ -18,10 +18,12 @@ import {
   Users,
   Award,
   BookOpen,
+  Table2,
   ChevronRight,
   ChevronDown,
   ExternalLink,
-  X
+  X,
+  Briefcase
 } from "lucide-react";
 import {
   BarChart,
@@ -60,6 +62,22 @@ interface SemesterReport {
   subjects: Subject[];
 }
 
+interface Internship {
+  id: string;
+  courseName: string;
+  hours: number;
+  fileName: string | null;
+  fileUrl: string | null;
+  isVerified: boolean;
+  createdAt: string;
+  userId: string;
+  user?: {
+    name: string;
+    registerNo: string;
+    batch?: string | null;
+  };
+}
+
 interface Student {
   id: string;
   registerNo: string;
@@ -67,6 +85,7 @@ interface Student {
   batch?: string | null;
   createdAt: string;
   semesters: SemesterReport[];
+  internships: Internship[];
 }
 
 export default function AdminDashboard() {
@@ -78,6 +97,7 @@ export default function AdminDashboard() {
   const [error, setError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedBatch, setSelectedBatch] = useState<string>("All");
+  const [selectedAnalysisSemester, setSelectedAnalysisSemester] = useState<number>(0);
   
   // Modal viewer states
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
@@ -148,6 +168,68 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleVerifyInternship = async (id: string, verify: boolean) => {
+    try {
+      setLoading(true);
+      const res = await fetch(`/api/admin/internships`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id,
+          isVerified: verify,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setError(data.message || "Failed to update internship verification status.");
+      } else {
+        fetchStudents();
+        if (selectedStudent) {
+          const updatedInternships = selectedStudent.internships?.map(internship => {
+            if (internship.id === id) {
+              return { ...internship, isVerified: verify };
+            }
+            return internship;
+          }) || [];
+          setSelectedStudent({ ...selectedStudent, internships: updatedInternships });
+        }
+      }
+    } catch (err) {
+      setError("Internship verification server request failed.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteInternship = async (id: string) => {
+    if (!confirm(`Are you sure you want to delete this internship record?`)) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const res = await fetch(`/api/admin/internships?id=${id}`, {
+        method: "DELETE",
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setError(data.message || "Failed to delete internship record.");
+      } else {
+        fetchStudents();
+        if (selectedStudent) {
+          const updatedInternships = selectedStudent.internships?.filter(internship => internship.id !== id) || [];
+          setSelectedStudent({ ...selectedStudent, internships: updatedInternships });
+        }
+      }
+    } catch (err) {
+      setError("Internship delete server request failed.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleDeleteStudent = async (registerNo: string) => {
     if (!confirm(`Are you absolutely sure you want to delete the profile of student ${registerNo}? This action is irreversible.`)) {
       return;
@@ -209,6 +291,16 @@ export default function AdminDashboard() {
   }
   const pendingQueue: PendingItem[] = [];
 
+  // Track internships and pending queue
+  interface InternshipQueueItem {
+    studentName: string;
+    registerNo: string;
+    internship: Internship;
+  }
+  const pendingInternshipsQueue: InternshipQueueItem[] = [];
+  let totalPendingInternships = 0;
+  let totalVerifiedInternships = 0;
+
   batchStudents.forEach((student) => {
     student.semesters.forEach((sem) => {
       if (sem.isVerified) {
@@ -222,6 +314,21 @@ export default function AdminDashboard() {
         });
       }
     });
+
+    if (student.internships) {
+      student.internships.forEach((internship) => {
+        if (internship.isVerified) {
+          totalVerifiedInternships++;
+        } else {
+          totalPendingInternships++;
+          pendingInternshipsQueue.push({
+            studentName: student.name,
+            registerNo: student.registerNo,
+            internship,
+          });
+        }
+      });
+    }
 
     if (student.semesters.length > 0) {
       // Latest semester CGPA represents the student's current CGPA
@@ -245,6 +352,58 @@ export default function AdminDashboard() {
     { name: "Verified Semesters", value: totalVerifiedSemesters, color: "#10b981" },
     { name: "Pending Audit", value: totalPendingSemesters, color: "#f59e0b" },
   ];
+
+  // ─── Result Analysis Spreadsheet Data ───
+  const availableSemesters = Array.from(
+    new Set(batchStudents.flatMap(s => s.semesters.map(sem => sem.semesterNumber)))
+  ).sort((a, b) => a - b);
+
+  const effectiveSemester =
+    availableSemesters.length === 0
+      ? 0
+      : availableSemesters.includes(selectedAnalysisSemester)
+        ? selectedAnalysisSemester
+        : availableSemesters[0];
+
+  const analysisStudents = effectiveSemester > 0
+    ? batchStudents
+        .filter(s => s.semesters.some(sem => sem.semesterNumber === effectiveSemester))
+        .map(s => ({
+          student: s,
+          semester: s.semesters.find(sem => sem.semesterNumber === effectiveSemester)!,
+        }))
+    : [];
+
+  const analysisSubjects: { code: string; name: string; mergedCodes?: string[]; mergedNames?: string[] }[] = [];
+  const seenSubjectCodes = new Set<string>();
+  const mdcCodes: string[] = [];
+  const mdcNames: string[] = [];
+
+  // First pass: collect all MDC (105) subject codes and names
+  analysisStudents.forEach(({ semester }) => {
+    semester.subjects.forEach(sub => {
+      if (sub.subjectCode.includes('105') && !mdcCodes.includes(sub.subjectCode)) {
+        mdcCodes.push(sub.subjectCode);
+        mdcNames.push(sub.subjectName.split(' - ')[1] || sub.subjectName);
+      }
+    });
+  });
+
+  // Second pass: build columns, merging all 105 subjects into single MDC column
+  let mdcInserted = false;
+  analysisStudents.forEach(({ semester }) => {
+    semester.subjects.forEach(sub => {
+      if (sub.subjectCode.includes('105')) {
+        if (!mdcInserted) {
+          mdcInserted = true;
+          analysisSubjects.push({ code: 'MDC', name: 'Multi-Disciplinary Course', mergedCodes: mdcCodes, mergedNames: mdcNames });
+        }
+      } else if (!seenSubjectCodes.has(sub.subjectCode)) {
+        seenSubjectCodes.add(sub.subjectCode);
+        analysisSubjects.push({ code: sub.subjectCode, name: sub.subjectName });
+      }
+    });
+  });
 
   if (loading && students.length === 0) {
     return (
@@ -298,7 +457,7 @@ export default function AdminDashboard() {
         )}
 
         {/* Top metrics dashboard banner */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
           <div className="glass-panel rounded-2xl p-6 flex items-center gap-5">
             <div className="w-12 h-12 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center shrink-0">
               <Users className="w-6 h-6 text-indigo-400" />
@@ -324,8 +483,18 @@ export default function AdminDashboard() {
               <Clock className="w-6 h-6 text-amber-400 animate-pulse" />
             </div>
             <div>
-              <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Pending Audit Queue</span>
+              <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Pending Semesters</span>
               <p className="text-3xl font-black text-amber-400 mt-1">{totalPendingSemesters}</p>
+            </div>
+          </div>
+
+          <div className="glass-panel rounded-2xl p-6 flex items-center gap-5">
+            <div className="w-12 h-12 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center shrink-0">
+              <Briefcase className="w-6 h-6 text-rose-400" />
+            </div>
+            <div>
+              <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Pending Internships</span>
+              <p className="text-3xl font-black text-rose-400 mt-1">{totalPendingInternships}</p>
             </div>
           </div>
         </div>
@@ -400,6 +569,65 @@ export default function AdminDashboard() {
                     <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto mb-2" />
                     <p className="font-semibold text-sm">All Clear! Audit queue is empty.</p>
                     <p className="text-xs text-slate-500 mt-0.5">There are no pending student marksheets needing validation.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Audit Internships Queue */}
+            <div className="glass-panel rounded-2xl p-6">
+              <h3 className="font-bold text-lg text-slate-200 mb-6 flex items-center gap-2">
+                <Briefcase className="w-5 h-5 text-rose-400" />
+                Audit Internships Queue
+              </h3>
+
+              <div className="space-y-4 max-h-[400px] overflow-y-auto pr-1 scrollbar-hide">
+                {pendingInternshipsQueue.map((item, idx) => (
+                  <div
+                    key={idx}
+                    className="bg-slate-900/60 border border-slate-800 p-4 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:border-slate-700/80 transition-all"
+                  >
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-200">{item.studentName}</span>
+                        <span className="text-xs text-slate-400">({item.registerNo})</span>
+                      </div>
+                      <div className="text-xs text-slate-400 mt-1 flex gap-3 flex-wrap">
+                        <span>Course: <strong>{item.internship.courseName}</strong></span>
+                        <span>Hours: <strong className="text-indigo-400">{item.internship.hours} hrs</strong></span>
+                        {item.internship.fileName && (
+                          <span className="max-w-[200px] truncate block">File: {item.internship.fileName}</span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
+                      {item.internship.fileUrl && (
+                        <a
+                          href={`/api/view-file?url=${encodeURIComponent(item.internship.fileUrl)}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs px-3 py-1.5 rounded-xl transition-all w-1/2 sm:w-auto font-medium"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          <span>View Certificate</span>
+                        </a>
+                      )}
+                      <button
+                        onClick={() => handleVerifyInternship(item.internship.id, true)}
+                        className="flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-3 py-1.5 rounded-xl transition-all w-1/2 sm:w-auto font-bold shadow-md"
+                      >
+                        <Check className="w-4 h-4" />
+                        <span>Verify & Approve</span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {pendingInternshipsQueue.length === 0 && (
+                  <div className="text-center py-12 text-slate-400 border border-dashed border-slate-800 rounded-xl">
+                    <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto mb-2" />
+                    <p className="font-semibold text-sm">All Clear! Internship queue is empty.</p>
+                    <p className="text-xs text-slate-500 mt-0.5">There are no pending internship certificate audits.</p>
                   </div>
                 )}
               </div>
@@ -568,6 +796,99 @@ export default function AdminDashboard() {
             </div>
           </div>
         </div>
+
+        {/* ─── Result Analysis Spreadsheet (Full Width) ─── */}
+        <div className="glass-panel no-lift rounded-2xl p-6">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+            <h3 className="font-bold text-lg text-slate-200 flex items-center gap-2">
+              <Table2 className="w-5 h-5 text-rose-400" />
+              Result Analysis — Semester {effectiveSemester || '–'}
+            </h3>
+            <div className="relative">
+              <select
+                value={effectiveSemester}
+                onChange={(e) => setSelectedAnalysisSemester(Number(e.target.value))}
+                className="bg-slate-900/60 border border-slate-700/60 rounded-xl py-2 pl-4 pr-10 text-sm text-slate-200 focus:outline-none focus:border-rose-500 transition-colors appearance-none cursor-pointer font-semibold"
+              >
+                {availableSemesters.length === 0 && (
+                  <option value={0}>No Semesters Available</option>
+                )}
+                {availableSemesters.map(sem => (
+                  <option key={sem} value={sem} className="bg-slate-950 text-slate-100">
+                    Semester {sem}
+                  </option>
+                ))}
+              </select>
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-400">
+                <ChevronDown className="w-3.5 h-3.5" />
+              </div>
+            </div>
+          </div>
+
+          {analysisStudents.length > 0 ? (
+            <div className="overflow-x-auto rounded-xl border border-slate-800">
+              <table className="w-full text-left text-xs spreadsheet-table">
+                <thead>
+                  <tr className="bg-slate-900/60 text-[10px] text-slate-500 uppercase font-bold border-b-2 border-slate-700">
+                    <th className="p-2.5 text-center w-10">#</th>
+                    <th className="p-2.5 min-w-[120px]">Reg No</th>
+                    <th className="p-2.5 min-w-[150px]">Name</th>
+                    {analysisSubjects.map(sub => (
+                      <th key={sub.code} className="p-2.5 text-center min-w-[70px]" title={sub.mergedNames ? sub.mergedNames.join(', ') : (sub.name.split(' - ')[1] || sub.name)}>
+                        {sub.code}
+                      </th>
+                    ))}
+                    <th className="p-2.5 text-center min-w-[72px]">Grade</th>
+                    <th className="p-2.5 text-center min-w-[72px]">SGPA</th>
+                    <th className="p-2.5 text-center w-14"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {analysisStudents.map(({ student, semester }, idx) => {
+                    const gradeMap = new Map(semester.subjects.map(s => [s.subjectCode, s.grade]));
+                    return (
+                      <tr key={student.id} className="border-b border-slate-800/30 last:border-0">
+                        <td className="p-2.5 text-center font-semibold text-slate-400">{idx + 1}</td>
+                        <td className="p-2.5 font-semibold text-indigo-400 whitespace-nowrap">{student.registerNo}</td>
+                        <td className="p-2.5 text-slate-200 font-medium">{student.name}</td>
+                        {analysisSubjects.map(sub => {
+                          const grade = sub.mergedCodes
+                            ? sub.mergedCodes.reduce<string | undefined>((found, code) => found || gradeMap.get(code), undefined)
+                            : gradeMap.get(sub.code);
+                          return (
+                            <td key={sub.code} className="p-2.5 text-center font-bold text-slate-100">
+                              {grade || <span className="text-slate-600">—</span>}
+                            </td>
+                          );
+                        })}
+                        <td className="p-2.5 text-center font-bold text-slate-100">{semester.overallGrade}</td>
+                        <td className="p-2.5 text-center font-bold text-emerald-400">{semester.sgpa.toFixed(3)}</td>
+                        <td className="p-2.5 text-center">
+                          <button
+                            onClick={() => {
+                              setSelectedStudent(student);
+                              setIsViewingTranscript(true);
+                            }}
+                            className="p-1.5 bg-slate-800 hover:bg-rose-500/20 text-slate-300 hover:text-rose-400 rounded-lg transition-all"
+                            title="View All Semesters"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="text-center py-12 text-slate-400 border border-dashed border-slate-800 rounded-xl">
+              <Table2 className="w-8 h-8 text-slate-500 mx-auto mb-2" />
+              <p className="font-semibold text-sm">No results available for this semester.</p>
+              <p className="text-xs text-slate-500 mt-0.5">No students have uploaded marksheets for the selected semester.</p>
+            </div>
+          )}
+        </div>
       </main>
 
       {/* Admin View Full Student Profile & Verification Transcript Modal */}
@@ -682,6 +1003,90 @@ export default function AdminDashboard() {
                   This student has not uploaded any marksheet reports yet.
                 </div>
               )}
+
+              {/* Internships Section in Modal */}
+              <div className="mt-8 border-t border-slate-800 pt-6">
+                <h4 className="font-bold text-base text-slate-200 mb-4 flex items-center gap-2">
+                  <Briefcase className="w-5 h-5 text-rose-400" />
+                  Completed Internships
+                </h4>
+                {selectedStudent.internships && selectedStudent.internships.length > 0 ? (
+                  <div className="overflow-x-auto rounded-xl border border-slate-800">
+                    <table className="w-full text-left text-xs min-w-[500px]">
+                      <thead>
+                        <tr className="bg-slate-900/20 text-[10px] text-slate-500 uppercase font-bold border-b border-slate-800/80">
+                          <th className="p-3">Course/Internship Name</th>
+                          <th className="p-3 text-center w-24">Hours</th>
+                          <th className="p-3 text-center w-28">Status</th>
+                          <th className="p-3 text-center w-48">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selectedStudent.internships.map((internship) => (
+                          <tr key={internship.id} className="border-b border-slate-800/30 last:border-0 hover:bg-slate-900/10">
+                            <td className="p-3 font-semibold text-slate-200">{internship.courseName}</td>
+                            <td className="p-3 text-center font-medium text-slate-300">{internship.hours} hrs</td>
+                            <td className="p-3 text-center">
+                              {internship.isVerified ? (
+                                <span className="inline-flex items-center gap-1 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full text-xs font-semibold">
+                                  <CheckCircle2 className="w-3 h-3" />
+                                  Verified
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 bg-amber-500/10 border border-amber-500/20 text-amber-400 px-2 py-0.5 rounded-full text-xs font-semibold">
+                                  <Clock className="w-3 h-3 animate-pulse" />
+                                  Pending
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-3 text-center">
+                              <div className="flex items-center justify-center gap-2">
+                                {internship.fileUrl && (
+                                  <a
+                                    href={`/api/view-file?url=${encodeURIComponent(internship.fileUrl)}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs px-2 py-1 rounded-lg transition-all font-semibold flex items-center gap-1"
+                                  >
+                                    <ExternalLink className="w-3 h-3" />
+                                    View
+                                  </a>
+                                )}
+                                {internship.isVerified ? (
+                                  <button
+                                    onClick={() => handleVerifyInternship(internship.id, false)}
+                                    className="bg-emerald-500/10 border border-emerald-500/20 hover:bg-rose-500/10 hover:text-rose-400 hover:border-rose-500/20 text-emerald-400 text-xs px-2 py-1 rounded-lg transition-all font-bold"
+                                    title="Revoke approval"
+                                  >
+                                    Verified
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => handleVerifyInternship(internship.id, true)}
+                                    className="bg-amber-500/10 hover:bg-emerald-600 hover:text-white border border-amber-500/20 hover:border-transparent text-amber-400 text-xs px-2 py-1 rounded-lg transition-all font-bold"
+                                  >
+                                    Approve
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => handleDeleteInternship(internship.id)}
+                                  className="bg-slate-800 hover:bg-rose-600 text-slate-400 hover:text-white text-xs px-2 py-1 rounded-lg transition-all font-semibold"
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="text-center py-6 text-slate-500 border border-dashed border-slate-800 rounded-xl text-xs">
+                    No internship records uploaded yet.
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Modal Footer */}

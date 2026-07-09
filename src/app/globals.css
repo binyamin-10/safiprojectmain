@@ -134,3 +134,27 @@ button:active, a:active {
 main, .auth-card {
   animation: fadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
+
+/* Result Analysis Spreadsheet */
+.glass-panel.no-lift:hover {
+  transform: none;
+}
+
+.spreadsheet-table tbody tr:nth-child(even) {
+  background-color: rgba(13, 127, 88, 0.04);
+}
+
+.spreadsheet-table tbody tr:hover {
+  background-color: rgba(13, 127, 88, 0.08) !important;
+}
+
+.spreadsheet-table th,
+.spreadsheet-table td {
+  white-space: nowrap;
+  border-right: 1px solid rgba(210, 230, 223, 0.5);
+}
+
+.spreadsheet-table th:last-child,
+.spreadsheet-table td:last-child {
+  border-right: none;
+}

@@ -20,7 +20,9 @@ import {
   Printer,
   Edit2,
   Save,
-  X
+  X,
+  Briefcase,
+  ExternalLink
 } from "lucide-react";
 
 // Calicut University grade point table (inlined — no curriculum dependency)
@@ -55,11 +57,22 @@ interface SemesterReport {
   subjects: Subject[];
 }
 
+interface Internship {
+  id: string;
+  courseName: string;
+  hours: number;
+  fileName: string | null;
+  fileUrl: string | null;
+  isVerified: boolean;
+  createdAt: string;
+}
+
 interface StudentData {
   id: string;
   name: string;
   registerNo: string;
   semesters: SemesterReport[];
+  internships: Internship[];
 }
 
 export default function StudentDashboard() {
@@ -75,6 +88,12 @@ export default function StudentDashboard() {
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [scanning, setScanning] = useState(false);
 
+  // Internship states
+  const [internshipCourse, setInternshipCourse] = useState("");
+  const [internshipHours, setInternshipHours] = useState("");
+  const [internshipFile, setInternshipFile] = useState<File | null>(null);
+  const [uploadingInternship, setUploadingInternship] = useState(false);
+
   // OCR modal states
   const [ocrData, setOcrData] = useState<any | null>(null);
   const [isVerifying, setIsVerifying] = useState(false);
@@ -86,6 +105,7 @@ export default function StudentDashboard() {
   const [isPrintView, setIsPrintView] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const internshipFileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -152,6 +172,51 @@ export default function StudentDashboard() {
       setScanning(false);
       setUploadFile(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleInternshipFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setInternshipFile(e.target.files[0]);
+    }
+  };
+
+  const submitInternship = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!internshipCourse || !internshipHours || !internshipFile) {
+      setError("Please fill in all internship fields and upload certificate.");
+      return;
+    }
+
+    setUploadingInternship(true);
+    setError("");
+
+    const formData = new FormData();
+    formData.append("courseName", internshipCourse);
+    formData.append("hours", internshipHours);
+    formData.append("certificate", internshipFile);
+
+    try {
+      const res = await fetch("/api/internships", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setError(data.message || "Failed to upload internship certificate.");
+      } else {
+        setInternshipCourse("");
+        setInternshipHours("");
+        setInternshipFile(null);
+        if (internshipFileInputRef.current) internshipFileInputRef.current.value = "";
+        
+        fetchStudentData(); // Refresh UI
+      }
+    } catch (err) {
+      setError("Internship upload connection failed.");
+    } finally {
+      setUploadingInternship(false);
     }
   };
 
@@ -546,6 +611,131 @@ export default function StudentDashboard() {
                       )}
                     </button>
                   </form>
+                </div>
+
+                {/* Internship Upload Section */}
+                <div className="glass-panel rounded-2xl p-6">
+                  <h3 className="font-bold text-lg text-slate-200 mb-4 flex items-center gap-2">
+                    <Briefcase className="w-5 h-5 text-indigo-400" />
+                    Upload Internship Certificate
+                  </h3>
+                  <form onSubmit={submitInternship} className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div className="sm:col-span-2">
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                          Course/Internship Name
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Full Stack Web Development"
+                          value={internshipCourse}
+                          onChange={(e) => setInternshipCourse(e.target.value)}
+                          className="w-full bg-slate-900 border border-slate-700/80 rounded-xl py-2 px-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                          Duration (Hours)
+                        </label>
+                        <input
+                          type="number"
+                          placeholder="e.g. 40"
+                          value={internshipHours}
+                          onChange={(e) => setInternshipHours(e.target.value)}
+                          className="w-full bg-slate-900 border border-slate-700/80 rounded-xl py-2 px-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                        Upload Certificate (PDF/Image)
+                      </label>
+                      <input
+                        type="file"
+                        accept="image/*,application/pdf"
+                        onChange={handleInternshipFileChange}
+                        ref={internshipFileInputRef}
+                        className="w-full text-sm text-slate-400 file:mr-4 file:py-1.5 file:px-3.5 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-slate-800 file:text-slate-200 hover:file:bg-slate-700 file:cursor-pointer bg-slate-900 border border-slate-700/80 py-1.5 px-3 rounded-xl"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={uploadingInternship || !internshipCourse || !internshipHours || !internshipFile}
+                      className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-2.5 rounded-xl transition-all disabled:bg-slate-800 disabled:text-slate-400/60 flex items-center justify-center gap-2 mt-2"
+                    >
+                      {uploadingInternship ? (
+                        <>
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                          <span>Uploading Certificate...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-5 h-5" />
+                          <span>Submit Internship Record</span>
+                        </>
+                      )}
+                    </button>
+                  </form>
+                </div>
+
+                {/* Internship List Section */}
+                <div className="glass-panel rounded-2xl p-6">
+                  <h3 className="font-bold text-lg text-slate-200 mb-4 flex items-center gap-2">
+                    <Briefcase className="w-5 h-5 text-indigo-400" />
+                    My Internships
+                  </h3>
+                  {student?.internships && student.internships.length > 0 ? (
+                    <div className="overflow-x-auto rounded-xl border border-slate-800">
+                      <table className="w-full text-left text-sm min-w-[500px]">
+                        <thead>
+                          <tr className="text-xs text-slate-500 uppercase tracking-wider font-bold border-b border-slate-800 pb-3">
+                            <th className="p-3">Course/Internship Name</th>
+                            <th className="p-3 text-center w-24">Hours</th>
+                            <th className="p-3 text-center w-28">Status</th>
+                            <th className="p-3 text-center w-32">Certificate</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {student.internships.map((internship) => (
+                            <tr key={internship.id} className="border-b border-slate-800/40 last:border-0 hover:bg-slate-900/10">
+                              <td className="p-3 font-semibold text-slate-200">{internship.courseName}</td>
+                              <td className="p-3 text-center text-slate-300 font-medium">{internship.hours} hrs</td>
+                              <td className="p-3 text-center">
+                                {internship.isVerified ? (
+                                  <span className="inline-flex items-center gap-1 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full text-xs font-semibold">
+                                    <CheckCircle className="w-3.5 h-3.5" />
+                                    Verified
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 bg-amber-500/10 border border-amber-500/20 text-amber-400 px-2 py-0.5 rounded-full text-xs font-semibold">
+                                    <Clock className="w-3.5 h-3.5 animate-pulse" />
+                                    Pending
+                                  </span>
+                                )}
+                              </td>
+                              <td className="p-3 text-center">
+                                {internship.fileUrl && (
+                                  <a
+                                    href={`/api/view-file?url=${encodeURIComponent(internship.fileUrl)}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 font-semibold"
+                                  >
+                                    <ExternalLink className="w-3.5 h-3.5" />
+                                    View PDF
+                                  </a>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-slate-500 border border-dashed border-slate-800 rounded-xl">
+                      No internship certificates uploaded yet.
+                    </div>
+                  )}
                 </div>
 
                 {/* Expanded Semester Details List */}

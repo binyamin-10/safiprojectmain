@@ -29,7 +29,7 @@ export async function GET(
       );
     }
 
-    const student = await prisma.user.findFirst({
+    const student = await (prisma.user as any).findFirst({
       where: {
         registerNo: {
           equals: registerNo,
@@ -47,6 +47,11 @@ export async function GET(
           },
           orderBy: {
             semesterNumber: "asc",
+          },
+        },
+        internships: {
+          orderBy: {
+            createdAt: "desc",
           },
         },
       },

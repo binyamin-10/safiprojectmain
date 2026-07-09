@@ -14,7 +14,7 @@ export async function GET() {
     }
 
     // Retrieve all students
-    const students = await prisma.user.findMany({
+    const students = await (prisma.user as any).findMany({
       where: { role: "STUDENT" },
       select: {
         id: true,
@@ -25,6 +25,11 @@ export async function GET() {
         semesters: {
           include: {
             subjects: true,
+          },
+        },
+        internships: {
+          orderBy: {
+            createdAt: "desc",
           },
         },
       },
