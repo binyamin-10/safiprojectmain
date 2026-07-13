@@ -3,7 +3,8 @@
 import { useState, useEffect } from "react";
 import { signIn, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { GraduationCap, Lock, User, CheckCircle, AlertCircle, Loader2, BookOpen, Users, ChevronDown } from "lucide-react";
+import { GraduationCap, Lock, User, CheckCircle, AlertCircle, Loader2, BookOpen, Users, ChevronDown, Calendar } from "lucide-react";
+import CalendarModal from "../components/CalendarModal";
 
 export default function Home() {
   const { data: session, status } = useSession();
@@ -20,6 +21,10 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  // Custom Calendar Modal toggle states
+  const [showLoginCalendar, setShowLoginCalendar] = useState(false);
+  const [showRegCalendar, setShowRegCalendar] = useState(false);
 
   // Redirect if already logged in
   useEffect(() => {
@@ -48,7 +53,7 @@ export default function Home() {
     try {
       const res = await signIn("credentials", {
         redirect: false,
-        username,
+        username: username.toUpperCase(),
         password,
       });
 
@@ -83,7 +88,7 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name,
+          name: name.toUpperCase(),
           registerNo: registerNo.toUpperCase(),
           password: regPassword,
           batch,
@@ -125,7 +130,7 @@ export default function Home() {
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen p-4 sm:p-6">
-      <div className="w-full max-w-md glass-panel auth-card rounded-2xl overflow-hidden p-6 sm:p-8">
+      <div className="w-full max-w-md glass-panel auth-card rounded-2xl p-6 sm:p-8 relative">
         
         {/* Logo and title */}
         <div className="flex flex-col items-center mb-8">
@@ -134,7 +139,7 @@ export default function Home() {
           </div>
           <h1 className="text-2xl font-bold text-slate-100 tracking-tight text-center">Academic Report Portal</h1>
           <p className="text-xs text-slate-400 mt-1 text-center max-w-xs">
-            Safi Institute of Advanced Study — BCA Curriculum Management
+            Safi Institute of Advanced Study
           </p>
         </div>
 
@@ -148,7 +153,7 @@ export default function Home() {
                 : "border-transparent text-slate-400 hover:text-slate-200"
             }`}
           >
-            Student Sign In
+            Student
           </button>
           <button
             onClick={() => { setActiveTab("admin"); setError(""); setSuccess(""); }}
@@ -158,7 +163,7 @@ export default function Home() {
                 : "border-transparent text-slate-400 hover:text-slate-200"
             }`}
           >
-            Faculty Portal
+            Faculty
           </button>
           <button
             onClick={() => { setActiveTab("register"); setError(""); setSuccess(""); }}
@@ -192,33 +197,62 @@ export default function Home() {
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
-                {activeTab === "student" ? "Register No / Username" : "Admin Username"}
+                {activeTab === "student" ? "Register No" : "Admin Username"}
               </label>
               <div className="relative">
                 <User className="absolute left-3 top-2.5 w-5 h-5 text-slate-500" />
                 <input
                   type="text"
                   value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder={activeTab === "student" ? "SIAYBCA051" : "admin"}
-                  className="w-full bg-slate-900/60 border border-slate-700/60 rounded-xl py-2 pl-10 pr-4 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setUsername(val.toUpperCase().replace(/[^A-Z0-9]/g, ""));
+                  }}
+                  placeholder={activeTab === "student" ? "SIAYBCM001" : "admin"}
+                  className="w-full bg-slate-900/60 border border-slate-700/60 rounded-xl py-2 pl-10 pr-4 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors font-semibold"
                 />
               </div>
             </div>
 
-            <div>
+            <div className="relative">
               <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
-                Password
+                {activeTab === "student" ? "Date of Birth" : "Password"}
               </label>
               <div className="relative">
-                <Lock className="absolute left-3 top-2.5 w-5 h-5 text-slate-500" />
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full bg-slate-900/60 border border-slate-700/60 rounded-xl py-2 pl-10 pr-4 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
-                />
+                {activeTab === "student" ? (
+                  <>
+                    <div className="relative">
+                      <Calendar className="absolute left-3 top-2.5 w-5 h-5 text-slate-500" />
+                      <input
+                        type="text"
+                        readOnly
+                        value={password}
+                        onClick={() => setShowLoginCalendar(true)}
+                        placeholder="Select Date of Birth"
+                        className="w-full bg-slate-900/60 border border-slate-700/60 rounded-xl py-2 pl-10 pr-4 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors font-semibold cursor-pointer"
+                      />
+                    </div>
+
+                    <CalendarModal
+                      isOpen={showLoginCalendar}
+                      onClose={() => setShowLoginCalendar(false)}
+                      selectedDate={password}
+                      onSelectDate={setPassword}
+                      themeColor="indigo"
+                    />
+                  </>
+                ) : (
+                  <>
+                    <Lock className="absolute left-3 top-2.5 w-5 h-5 text-slate-500" />
+                    <input
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="w-full bg-slate-900/60 border border-slate-700/60 rounded-xl py-2 pl-10 pr-4 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors font-semibold"
+                    />
+                  </>
+                )}
               </div>
             </div>
 
@@ -240,11 +274,6 @@ export default function Home() {
                 <span>Sign In</span>
               )}
             </button>
-            {activeTab === "admin" && (
-              <p className="text-center text-[10px] text-slate-500 mt-2">
-                Default credentials: <code className="bg-slate-900 px-1 py-0.5 rounded text-rose-300">admin / admin123</code>
-              </p>
-            )}
           </form>
         ) : (
           <form onSubmit={handleRegister} className="space-y-4">
@@ -257,9 +286,9 @@ export default function Home() {
                 <input
                   type="text"
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="BINYAMIN THANHA T"
-                  className="w-full bg-slate-900/60 border border-slate-700/60 rounded-xl py-2 pl-10 pr-4 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
+                  onChange={(e) => setName(e.target.value.toUpperCase())}
+                  placeholder="NAME"
+                  className="w-full bg-slate-900/60 border border-slate-700/60 rounded-xl py-2 pl-10 pr-4 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors font-semibold"
                 />
               </div>
             </div>
@@ -273,9 +302,9 @@ export default function Home() {
                 <input
                   type="text"
                   value={registerNo}
-                  onChange={(e) => setRegisterNo(e.target.value)}
-                  placeholder="SIAYBCA051"
-                  className="w-full bg-slate-900/60 border border-slate-700/60 rounded-xl py-2 pl-10 pr-4 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
+                  onChange={(e) => setRegisterNo(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))}
+                  placeholder="SIAYBCM001"
+                  className="w-full bg-slate-900/60 border border-slate-700/60 rounded-xl py-2 pl-10 pr-4 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors font-semibold"
                 />
               </div>
             </div>
@@ -289,7 +318,7 @@ export default function Home() {
                 <select
                   value={batch}
                   onChange={(e) => setBatch(e.target.value)}
-                  className="w-full bg-slate-900/60 border border-slate-700/60 rounded-xl py-2 pl-10 pr-10 text-slate-100 focus:outline-none focus:border-emerald-500 transition-colors appearance-none cursor-pointer text-sm"
+                  className="w-full bg-slate-900/60 border border-slate-700/60 rounded-xl py-2 pl-10 pr-10 text-slate-100 focus:outline-none focus:border-emerald-500 transition-colors appearance-none cursor-pointer text-sm font-semibold"
                 >
                   <option value="2024-2028" className="bg-slate-950 text-slate-100">2024-2028 (FYUGP)</option>
                   <option value="2025-2029" className="bg-slate-950 text-slate-100">2025-2029 (FYUGP)</option>
@@ -301,20 +330,29 @@ export default function Home() {
               </div>
             </div>
 
-            <div>
+            <div className="relative">
               <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
-                Password
+                Date of Birth
               </label>
               <div className="relative">
-                <Lock className="absolute left-3 top-2.5 w-5 h-5 text-slate-500" />
+                <Calendar className="absolute left-3 top-2.5 w-5 h-5 text-slate-500" />
                 <input
-                  type="password"
+                  type="text"
+                  readOnly
                   value={regPassword}
-                  onChange={(e) => setRegPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full bg-slate-900/60 border border-slate-700/60 rounded-xl py-2 pl-10 pr-4 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
+                  onClick={() => setShowRegCalendar(true)}
+                  placeholder="Select Date of Birth"
+                  className="w-full bg-slate-900/60 border border-slate-700/60 rounded-xl py-2 pl-10 pr-4 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors font-semibold cursor-pointer"
                 />
               </div>
+
+              <CalendarModal
+                isOpen={showRegCalendar}
+                onClose={() => setShowRegCalendar(false)}
+                selectedDate={regPassword}
+                onSelectDate={setRegPassword}
+                themeColor="emerald"
+              />
             </div>
 
             <button
@@ -334,11 +372,6 @@ export default function Home() {
           </form>
         )}
       </div>
-
-      <footer className="mt-8 text-xs text-slate-500 flex items-center gap-1">
-        <BookOpen className="w-4 h-4 text-slate-500" />
-        <span>BCA Honours Project • Calicut University Model</span>
-      </footer>
     </div>
   );
 }

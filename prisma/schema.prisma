@@ -29,6 +29,8 @@ model SemesterReport {
   fileName       String?
   fileUrl        String?
   isVerified     Boolean        @default(false)
+  apc            String?        // Attendance, Progress, and Conduct
+  grievance      String?        // Student submitted grievance message/report if grades are incorrect
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
   userId         String

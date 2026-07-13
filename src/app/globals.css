@@ -44,14 +44,13 @@
 }
 
 body {
-  background-color: #F0FAF5;
+  background-color: #f0faf5; /* cache invalidation trigger */
   background-image: 
     radial-gradient(at 0% 0%, rgba(27, 212, 136, 0.08) 0px, transparent 50%),
     radial-gradient(at 100% 0%, rgba(13, 127, 88, 0.06) 0px, transparent 50%),
-    radial-gradient(at 50% 100%, rgba(16, 185, 129, 0.04) 0px, transparent 50%),
-    linear-gradient(rgba(13, 127, 88, 0.12) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(13, 127, 88, 0.12) 1px, transparent 1px);
-  background-size: 100% 100%, 100% 100%, 100% 100%, 24px 24px, 24px 24px;
+    radial-gradient(at 50% 100%, rgba(16, 185, 129, 0.04) 0px, transparent 50%);
+  background-size: 100% 100%, 100% 100%, 100% 100%;
+  background-attachment: fixed;
   color: var(--foreground);
   min-height: 100vh;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
@@ -157,4 +156,88 @@ main, .auth-card {
 .spreadsheet-table th:last-child,
 .spreadsheet-table td:last-child {
   border-right: none;
+}
+
+/* Custom styling for calendar input UX */
+.date-input-picker {
+  cursor: pointer;
+  position: relative;
+}
+
+/* Webkit browser styling for calendar picker icon */
+.date-input-picker::-webkit-calendar-picker-indicator {
+  background: transparent;
+  bottom: 0;
+  color: transparent;
+  cursor: pointer;
+  height: auto;
+  left: 0;
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: auto;
+}
+
+/* Custom styling for calendar popup icon representation */
+.date-input-picker::after {
+  content: "";
+  display: block;
+}
+
+/* Custom color overrides for modern mobile/desktop date input indicators */
+.date-input-picker::-webkit-datetime-edit-year-field:focus,
+.date-input-picker::-webkit-datetime-edit-month-field:focus,
+.date-input-picker::-webkit-datetime-edit-day-field:focus {
+  background-color: var(--color-slate-800);
+  color: var(--color-slate-50);
+  border-radius: 4px;
+}
+
+/* Custom Calendar Dropdown Popup Styling (Webkit Browsers) */
+.date-input-picker::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+}
+
+/* Modern styling for the calendar panel popover */
+::-webkit-datetime-edit {
+  padding: 2px;
+}
+
+::-webkit-datetime-edit-fields-wrapper {
+  color: var(--foreground);
+}
+
+::-webkit-datetime-edit-text {
+  color: var(--color-slate-500);
+  padding: 0 4px;
+}
+
+/* Modernizing the Native Date Picker Dialog Interface */
+::-webkit-datetime-edit-month-field,
+::-webkit-datetime-edit-day-field,
+::-webkit-datetime-edit-year-field {
+  padding: 2px 4px;
+  border-radius: 4px;
+  color: var(--foreground);
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+::-webkit-datetime-edit-month-field:hover,
+::-webkit-datetime-edit-day-field:hover,
+::-webkit-datetime-edit-year-field:hover {
+  background-color: rgba(13, 127, 88, 0.1);
+  color: #0D7F58;
+}
+
+/* Designing calendar indicator details */
+::-webkit-calendar-picker-indicator {
+  filter: invert(36%) sepia(85%) saturate(442%) hue-rotate(113deg) brightness(92%) contrast(89%); /* Matches emerald theme color */
+  padding: 4px;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+::-webkit-calendar-picker-indicator:hover {
+  background-color: rgba(13, 127, 88, 0.1);
 }

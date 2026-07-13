@@ -14,7 +14,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { registerNo, semester, subjects, sgpa, overallGrade, status, fileName, fileUrl } = body;
+    const { registerNo, semester, subjects, sgpa, overallGrade, status, fileName, fileUrl, grievance } = body;
 
     if (!semester || !subjects || !sgpa) {
       return NextResponse.json(
@@ -94,6 +94,7 @@ export async function POST(request: Request) {
           fileName: fileName || null,
           fileUrl: fileUrl || null,
           isVerified: userRole === "ADMIN", // If admin saves/edits, it is verified automatically.
+          grievance: grievance || null,
           userId: student.id,
         },
       });

@@ -174,7 +174,10 @@ export async function PUT(
 
     await prisma.semesterReport.update({
       where: { id: report.id },
-      data: { isVerified: !!isVerified },
+      data: { 
+        isVerified: !!isVerified,
+        grievance: isVerified ? null : undefined
+      } as any,
     });
 
     return NextResponse.json({

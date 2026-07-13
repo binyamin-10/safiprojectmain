@@ -17,6 +17,13 @@ export async function POST(request: Request) {
       );
     }
 
+    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+      return NextResponse.json(
+        { success: false, message: "Invalid file type. Only official PDF marksheets are accepted." },
+        { status: 400 }
+      );
+    }
+
     if (!semesterStr) {
       return NextResponse.json(
         { success: false, message: "Semester number is required." },
@@ -36,17 +43,23 @@ export async function POST(request: Request) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
+    // Perform OCR processing
+    const ocrResult = await processMarksheetOCR(buffer, semester);
+
+    // Validate that the document is from official SAFI Institute of Advanced Study
+    const rawTextUpper = ocrResult.rawText.toUpperCase();
+    const isSafi = rawTextUpper.includes("SAFI") || rawTextUpper.includes("SIAS") || rawTextUpper.includes("SAFI INSTITUTE OF ADVANCED STUDY");
+    if (!isSafi) {
+      return NextResponse.json(
+        { success: false, message: "Only official marksheets from SAFI Institute of Advanced Study are accepted." },
+        { status: 400 }
+      );
+    }
+
     // Upload to Vercel Blob
     const uniqueFilename = `marksheet-${Date.now()}-${Math.round(Math.random() * 1e9)}-${file.name}`;
     const blob = await put(uniqueFilename, file, { access: 'private' });
     const fileUrl = blob.url;
-
-    // Perform OCR processing
-    const ocrResult = await processMarksheetOCR(buffer, semester);
-
-    console.log("[ROUTE] ocrResult.subjects.length:", ocrResult.subjects.length);
-    console.log("[ROUTE] ocrResult.rawText (first 600 chars):", ocrResult.rawText.substring(0, 600));
-    console.log("[ROUTE] ocrResult.sgpa:", ocrResult.sgpa);
 
     return NextResponse.json({
       success: true,
