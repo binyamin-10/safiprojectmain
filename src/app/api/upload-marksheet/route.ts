@@ -56,8 +56,9 @@ export async function POST(request: Request) {
       );
     }
 
-    // Upload to Vercel Blob
-    const uniqueFilename = `marksheet-${Date.now()}-${Math.round(Math.random() * 1e9)}-${file.name}`;
+    // Sanitize filename to prevent space/encoding issues (%20 / %2520) in Vercel Blob storage
+    const sanitizedOriginalName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_");
+    const uniqueFilename = `marksheet-${Date.now()}-${Math.round(Math.random() * 1e9)}-${sanitizedOriginalName}`;
     const blob = await put(uniqueFilename, file, { access: 'private' });
     const fileUrl = blob.url;
 

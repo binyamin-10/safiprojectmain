@@ -11,12 +11,16 @@ model User {
   registerNo   String           @unique
   name         String
   password     String
+  dob          String?          // Store actual DOB string for admin view/edit
   role         String           @default("STUDENT") // STUDENT or ADMIN
   batch        String?
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt
   semesters    SemesterReport[]
   internships  Internship[]
+
+  @@index([role])           // Speeds up admin findMany(where: { role: 'STUDENT' })
+  @@index([role, batch])    // Speeds up batch-filtered queries
 }
 
 model SemesterReport {
@@ -29,6 +33,7 @@ model SemesterReport {
   fileName       String?
   fileUrl        String?
   isVerified     Boolean        @default(false)
+  isRejected     Boolean        @default(false)
   apc            String?        // Attendance, Progress, and Conduct
   grievance      String?        // Student submitted grievance message/report if grades are incorrect
   createdAt      DateTime       @default(now())
@@ -38,6 +43,8 @@ model SemesterReport {
   subjects       SubjectGrade[]
 
   @@unique([userId, semesterNumber])
+  @@index([userId])                    // Speeds up per-student semester lookups
+  @@index([isVerified, isRejected])    // Speeds up pending queue filter
 }
 
 model SubjectGrade {
@@ -53,6 +60,8 @@ model SubjectGrade {
   updatedAt        DateTime       @updatedAt
   semesterReportId String
   semesterReport   SemesterReport @relation(fields: [semesterReportId], references: [id], onDelete: Cascade)
+
+  @@index([semesterReportId])   // Critical: speeds up every JOIN when loading subject grades
 }
 
 model Internship {
@@ -62,8 +71,12 @@ model Internship {
   fileName    String?
   fileUrl     String?
   isVerified  Boolean  @default(false)
+  isRejected  Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   userId      String
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])                // Speeds up per-student internship lookups
+  @@index([isVerified, userId])    // Speeds up pending internship queue
 }

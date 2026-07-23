@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, Fragment } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import {
@@ -28,7 +28,10 @@ import {
   MessageSquare,
   Edit2,
   HardDrive,
-  Download
+  Download,
+  ArrowUp,
+  ArrowDown,
+  Calendar
 } from "lucide-react";
 import {
   BarChart,
@@ -42,6 +45,7 @@ import {
   Pie,
   Cell
 } from "recharts";
+import ScorecardBuilder from "@/components/ScorecardBuilder";
 
 interface Subject {
   id: string;
@@ -64,6 +68,7 @@ interface SemesterReport {
   fileName: string | null;
   fileUrl: string | null;
   isVerified: boolean;
+  isRejected?: boolean;
   apc?: string | null;
   grievance?: string | null;
   subjects: Subject[];
@@ -76,6 +81,7 @@ interface Internship {
   fileName: string | null;
   fileUrl: string | null;
   isVerified: boolean;
+  isRejected?: boolean;
   createdAt: string;
   userId: string;
   user?: {
@@ -90,6 +96,7 @@ interface Student {
   registerNo: string;
   name: string;
   batch?: string | null;
+  dob?: string | null;
   createdAt: string;
   semesters: SemesterReport[];
   internships: Internship[];
@@ -105,7 +112,28 @@ export default function AdminDashboard() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedBatch, setSelectedBatch] = useState<string>("All");
   const [selectedAnalysisSemester, setSelectedAnalysisSemester] = useState<number | 'ALL'>(0);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'result-analysis' | 'internships' | 'student-issues'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'result-analysis' | 'internships' | 'student-issues' | 'score-cards'>('dashboard');
+
+  const [sortColumn, setSortColumn] = useState<string>("regNo");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+
+  const handleSort = (col: string) => {
+    if (sortColumn === col) {
+      setSortDirection(prev => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortColumn(col);
+      setSortDirection("asc");
+    }
+  };
+
+  const renderSortIndicator = (col: string) => {
+    if (sortColumn !== col) return null;
+    return sortDirection === "asc" ? (
+      <ArrowUp className="w-3 h-3 inline ml-1 text-emerald-400" />
+    ) : (
+      <ArrowDown className="w-3 h-3 inline ml-1 text-emerald-400" />
+    );
+  };
 
   // Mock issues state
   const [issues, setIssues] = useState([
@@ -150,6 +178,15 @@ export default function AdminDashboard() {
   // Modal viewer states
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [isViewingTranscript, setIsViewingTranscript] = useState(false);
+
+  // Student Edit Profile Modal state
+  const [editingStudent, setEditingStudent] = useState<Student | null>(null);
+  const [editRegisterNo, setEditRegisterNo] = useState("");
+  const [editName, setEditName] = useState("");
+  const [editBatch, setEditBatch] = useState("");
+  const [editDob, setEditDob] = useState("");
+  const [editPassword, setEditPassword] = useState("");
+  const [savingStudentEdit, setSavingStudentEdit] = useState(false);
 
   // States for bulk editing APC / Subject Grades
   const [isEditingApc, setIsEditingApc] = useState(false);
@@ -295,9 +332,9 @@ export default function AdminDashboard() {
       });
       
       // 3. Populate Rows
-      analysisStudents.forEach(({ student, semester }) => {
+      sortedAnalysisStudents.forEach(({ student, semester }) => {
         const rollNo = student.registerNo ? student.registerNo.slice(-2) : "—";
-        const gradeMap = new Map(semester.subjects.map(s => [s.subjectCode, s.grade]));
+        const gradeMap = new Map((semester?.subjects || []).map(s => [s.subjectCode, s.grade]));
         
         const rowValues: any[] = [
           rollNo,
@@ -580,7 +617,7 @@ export default function AdminDashboard() {
   const fetchStudents = async () => {
     try {
       setLoading(true);
-      const res = await fetch("/api/students");
+      const res = await fetch("/api/students?include=subjects");
       if (!res.ok) throw new Error("Could not load database.");
       const data = await res.json();
       setStudents(data);
@@ -592,8 +629,33 @@ export default function AdminDashboard() {
   };
 
   const handleVerifyReport = async (registerNo: string, semesterNumber: number, verify: boolean) => {
+    if (!verify && !confirm(`Are you sure you want to REJECT Semester ${semesterNumber} marksheet for student ${registerNo}? The uploaded PDF will be permanently deleted from cloud storage.`)) {
+      return;
+    }
+
+    // Optimistic UI Update
+    setStudents(prev => prev.map(st => 
+      st.registerNo === registerNo 
+        ? { 
+            ...st, 
+            semesters: st.semesters.map(sem => 
+              sem.semesterNumber === semesterNumber 
+                ? { ...sem, isVerified: verify, isRejected: !verify } 
+                : sem
+            ) 
+          } 
+        : st
+    ));
+    if (selectedStudent && selectedStudent.registerNo === registerNo) {
+      const updatedSemesters = selectedStudent.semesters.map(sem => 
+        sem.semesterNumber === semesterNumber 
+          ? { ...sem, isVerified: verify, isRejected: !verify } 
+          : sem
+      );
+      setSelectedStudent({ ...selectedStudent, semesters: updatedSemesters });
+    }
+
     try {
-      setLoading(true);
       const res = await fetch(`/api/students/${registerNo}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -606,30 +668,37 @@ export default function AdminDashboard() {
       const data = await res.json();
       if (!res.ok || !data.success) {
         setError(data.message || "Failed to update verification status.");
-      } else {
-        // Refresh local student record in list
-        fetchStudents();
-        // If viewing transcript modal, update the local selected student as well
-        if (selectedStudent && selectedStudent.registerNo === registerNo) {
-          const updatedSemesters = selectedStudent.semesters.map(sem => {
-            if (sem.semesterNumber === semesterNumber) {
-              return { ...sem, isVerified: verify };
-            }
-            return sem;
-          });
-          setSelectedStudent({ ...selectedStudent, semesters: updatedSemesters });
-        }
+        fetchStudents(); // Revert optimistic update
       }
     } catch (err) {
       setError("Verification server request failed.");
-    } finally {
-      setLoading(false);
+      fetchStudents(); // Revert optimistic update
     }
   };
 
   const handleVerifyInternship = async (id: string, verify: boolean) => {
+    if (!verify && !confirm("Are you sure you want to REJECT this internship record? The certificate file will be permanently deleted from cloud storage.")) {
+      return;
+    }
+
+    // Optimistic UI Update
+    const previousStudents = JSON.parse(JSON.stringify(students));
+    const previousSelected = selectedStudent ? JSON.parse(JSON.stringify(selectedStudent)) : null;
+
+    setStudents(prev => prev.map(st => ({
+      ...st,
+      internships: st.internships?.map(internship => 
+        internship.id === id ? { ...internship, isVerified: verify, isRejected: !verify } : internship
+      )
+    })));
+    if (selectedStudent) {
+      const updatedInternships = selectedStudent.internships?.map(internship => 
+        internship.id === id ? { ...internship, isVerified: verify, isRejected: !verify } : internship
+      ) || [];
+      setSelectedStudent({ ...selectedStudent, internships: updatedInternships });
+    }
+
     try {
-      setLoading(true);
       const res = await fetch(`/api/admin/internships`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -642,22 +711,13 @@ export default function AdminDashboard() {
       const data = await res.json();
       if (!res.ok || !data.success) {
         setError(data.message || "Failed to update internship verification status.");
-      } else {
-        fetchStudents();
-        if (selectedStudent) {
-          const updatedInternships = selectedStudent.internships?.map(internship => {
-            if (internship.id === id) {
-              return { ...internship, isVerified: verify };
-            }
-            return internship;
-          }) || [];
-          setSelectedStudent({ ...selectedStudent, internships: updatedInternships });
-        }
+        setStudents(previousStudents);
+        if (selectedStudent) setSelectedStudent(previousSelected);
       }
     } catch (err) {
       setError("Internship verification server request failed.");
-    } finally {
-      setLoading(false);
+      setStudents(previousStudents);
+      if (selectedStudent) setSelectedStudent(previousSelected);
     }
   };
 
@@ -666,8 +726,22 @@ export default function AdminDashboard() {
       return;
     }
 
+    // Optimistic UI update
+    const previousStudents = JSON.parse(JSON.stringify(students));
+    const previousSelected = selectedStudent ? JSON.parse(JSON.stringify(selectedStudent)) : null;
+
+    setStudents(prev => prev.map(st => ({
+      ...st,
+      internships: st.internships?.filter(i => i.id !== id)
+    })));
+    if (selectedStudent) {
+      setSelectedStudent({
+        ...selectedStudent,
+        internships: selectedStudent.internships?.filter(i => i.id !== id)
+      });
+    }
+
     try {
-      setLoading(true);
       const res = await fetch(`/api/admin/internships?id=${id}`, {
         method: "DELETE",
       });
@@ -675,17 +749,50 @@ export default function AdminDashboard() {
       const data = await res.json();
       if (!res.ok || !data.success) {
         setError(data.message || "Failed to delete internship record.");
-      } else {
-        fetchStudents();
-        if (selectedStudent) {
-          const updatedInternships = selectedStudent.internships?.filter(internship => internship.id !== id) || [];
-          setSelectedStudent({ ...selectedStudent, internships: updatedInternships });
-        }
+        setStudents(previousStudents);
+        if (selectedStudent) setSelectedStudent(previousSelected);
       }
     } catch (err) {
-      setError("Internship delete server request failed.");
+      setError("Internship deletion server request failed.");
+      setStudents(previousStudents);
+      if (selectedStudent) setSelectedStudent(previousSelected);
+    }
+  };
+
+  const handleSaveStudentEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingStudent) return;
+    try {
+      setSavingStudentEdit(true);
+      const res = await fetch("/api/admin/students", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentId: editingStudent.id,
+          registerNo: editRegisterNo,
+          name: editName,
+          batch: editBatch,
+          dob: editDob || undefined,
+          password: editPassword || undefined,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setError(data.message || "Failed to update student profile.");
+      } else {
+        // Optimistically update local students state
+        setStudents(prev => prev.map(s => 
+          s.id === editingStudent.id 
+            ? { ...s, registerNo: editRegisterNo, name: editName, batch: editBatch, dob: editDob || null } 
+            : s
+        ));
+        setEditingStudent(null);
+      }
+    } catch {
+      setError("Failed to connect to server to update student profile.");
     } finally {
-      setLoading(false);
+      setSavingStudentEdit(false);
     }
   };
 
@@ -764,7 +871,7 @@ export default function AdminDashboard() {
     student.semesters.forEach((sem) => {
       if (sem.isVerified) {
         totalVerifiedSemesters++;
-      } else {
+      } else if (!sem.isRejected) {
         totalPendingSemesters++;
         pendingQueue.push({
           studentName: student.name,
@@ -778,7 +885,7 @@ export default function AdminDashboard() {
       student.internships.forEach((internship) => {
         if (internship.isVerified) {
           totalVerifiedInternships++;
-        } else {
+        } else if (!internship.isRejected) {
           totalPendingInternships++;
           pendingInternshipsQueue.push({
             studentName: student.name,
@@ -865,10 +972,10 @@ export default function AdminDashboard() {
 
   // First pass: collect all MDC (105) subject codes and names
   analysisStudents.forEach(({ semester }) => {
-    semester.subjects.forEach(sub => {
-      if (sub.subjectCode.includes('105') && !mdcCodes.includes(sub.subjectCode)) {
+    (semester?.subjects || []).forEach(sub => {
+      if (sub?.subjectCode?.includes('105') && !mdcCodes.includes(sub.subjectCode)) {
         mdcCodes.push(sub.subjectCode);
-        mdcNames.push(sub.subjectName.split(' - ')[1] || sub.subjectName);
+        mdcNames.push(sub.subjectName ? (sub.subjectName.split(' - ')[1] || sub.subjectName) : '');
       }
     });
   });
@@ -876,18 +983,66 @@ export default function AdminDashboard() {
   // Second pass: build columns, merging all 105 subjects into single MDC column
   let mdcInserted = false;
   analysisStudents.forEach(({ semester }) => {
-    semester.subjects.forEach(sub => {
-      if (sub.subjectCode.includes('105')) {
+    (semester?.subjects || []).forEach(sub => {
+      if (sub?.subjectCode?.includes('105')) {
         if (!mdcInserted) {
           mdcInserted = true;
           analysisSubjects.push({ code: 'MDC', name: 'Multi-Disciplinary Course', mergedCodes: mdcCodes, mergedNames: mdcNames });
         }
-      } else if (!seenSubjectCodes.has(sub.subjectCode)) {
+      } else if (sub?.subjectCode && !seenSubjectCodes.has(sub.subjectCode)) {
         seenSubjectCodes.add(sub.subjectCode);
-        analysisSubjects.push({ code: sub.subjectCode, name: sub.subjectName });
+        analysisSubjects.push({ code: sub.subjectCode, name: sub.subjectName || '' });
       }
     });
   });
+
+  const GRADE_RANKS: Record<string, number> = {
+    "O": 10, "A+": 9, "A": 8, "B+": 7, "B": 6, "C": 5, "P": 4, "F": 0, "—": -1, "-": -1
+  };
+
+  const sortedAnalysisStudents = useMemo(() => {
+    const list = [...analysisStudents];
+    list.sort((a, b) => {
+      let valA: any = "";
+      let valB: any = "";
+
+      if (sortColumn === "regNo") {
+        valA = a.student.registerNo;
+        valB = b.student.registerNo;
+      } else if (sortColumn === "name") {
+        valA = a.student.name;
+        valB = b.student.name;
+      } else if (sortColumn === "sgpa") {
+        valA = a.semester.sgpa;
+        valB = b.semester.sgpa;
+      } else if (sortColumn === "apc") {
+        valA = a.semester.apc ? parseFloat(a.semester.apc) : -1;
+        valB = b.semester.apc ? parseFloat(b.semester.apc) : -1;
+      } else if (sortColumn === "grade") {
+        valA = GRADE_RANKS[a.semester.overallGrade] ?? 0;
+        valB = GRADE_RANKS[b.semester.overallGrade] ?? 0;
+      } else {
+        const subA = (a.semester.subjects || []).find(s =>
+          sortColumn === "MDC" ? s.subjectCode.includes("105") : s.subjectCode === sortColumn
+        );
+        const subB = (b.semester.subjects || []).find(s =>
+          sortColumn === "MDC" ? s.subjectCode.includes("105") : s.subjectCode === sortColumn
+        );
+        valA = GRADE_RANKS[subA?.grade || "—"] ?? -1;
+        valB = GRADE_RANKS[subB?.grade || "—"] ?? -1;
+      }
+
+      if (typeof valA === "string" && typeof valB === "string") {
+        return sortDirection === "asc"
+          ? valA.localeCompare(valB)
+          : valB.localeCompare(valA);
+      }
+      return sortDirection === "asc"
+        ? (valA > valB ? 1 : valA < valB ? -1 : 0)
+        : (valA < valB ? 1 : valA > valB ? -1 : 0);
+    });
+    return list;
+  }, [analysisStudents, sortColumn, sortDirection]);
 
   if (loading && students.length === 0) {
     return (
@@ -993,6 +1148,17 @@ export default function AdminDashboard() {
             <span className="ml-auto text-[9px] bg-slate-900/60 border border-slate-700/60 text-slate-300 px-1.5 py-0.5 rounded-full font-bold">
               {issues.filter(i => i.status === 'PENDING').length}
             </span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('score-cards')}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${activeTab === 'score-cards'
+                ? 'bg-rose-500/10 border border-rose-500/20 text-rose-400'
+                : 'hover:bg-slate-900/30 text-slate-400 hover:text-slate-200'
+              }`}
+          >
+            <Award className="w-4 h-4 shrink-0" />
+            <span>Scorecard Builder</span>
           </button>
         </nav>
 
@@ -1147,11 +1313,18 @@ export default function AdminDashboard() {
                               )
                             )}
                             <button
+                              onClick={() => handleVerifyReport(item.registerNo, item.report.semesterNumber, false)}
+                              className="flex items-center justify-center gap-1.5 bg-rose-600 hover:bg-rose-500 text-white text-xs px-3 py-1.5 rounded-xl transition-all w-1/2 sm:w-auto font-bold shadow-md"
+                            >
+                              <X className="w-4 h-4" />
+                              <span>Reject</span>
+                            </button>
+                            <button
                               onClick={() => handleVerifyReport(item.registerNo, item.report.semesterNumber, true)}
                               className="flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-3 py-1.5 rounded-xl transition-all w-1/2 sm:w-auto font-bold shadow-md"
                             >
                               <Check className="w-4 h-4" />
-                              <span>Verify & Approve</span>
+                              <span>Approve</span>
                             </button>
                           </div>
                         </div>
@@ -1265,11 +1438,18 @@ export default function AdminDashboard() {
                               </a>
                             )}
                             <button
+                              onClick={() => handleVerifyInternship(item.internship.id, false)}
+                              className="flex items-center justify-center gap-1.5 bg-rose-600 hover:bg-rose-500 text-white text-xs px-3 py-1.5 rounded-xl transition-all w-1/2 sm:w-auto font-bold shadow-md"
+                            >
+                              <X className="w-4 h-4" />
+                              <span>Reject</span>
+                            </button>
+                            <button
                               onClick={() => handleVerifyInternship(item.internship.id, true)}
                               className="flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-3 py-1.5 rounded-xl transition-all w-1/2 sm:w-auto font-bold shadow-md"
                             >
                               <Check className="w-4 h-4" />
-                              <span>Verify & Approve</span>
+                              <span>Approve</span>
                             </button>
                           </div>
                         </div>
@@ -1342,6 +1522,34 @@ export default function AdminDashboard() {
                                   title="View Transcript"
                                 >
                                   <Eye className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setEditingStudent(student);
+                                    setEditRegisterNo(student.registerNo);
+                                    setEditName(student.name);
+                                    setEditBatch(student.batch || "");
+                                    
+                                    // Helper to parse DD-MM-YYYY or similar to YYYY-MM-DD for <input type="date" />
+                                    let formattedDob = student.dob || "";
+                                    if (formattedDob) {
+                                      if (/^\d{4}-\d{2}-\d{2}$/.test(formattedDob)) {
+                                        // already YYYY-MM-DD
+                                      } else {
+                                        const parts = formattedDob.split(/[-/]/);
+                                        if (parts.length === 3 && parts[2].length === 4) {
+                                          formattedDob = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+                                        }
+                                      }
+                                    }
+                                    setEditDob(formattedDob);
+                                    
+                                    setEditPassword("");
+                                  }}
+                                  className="p-1.5 bg-slate-800 hover:bg-indigo-500/20 text-slate-300 hover:text-indigo-400 rounded-lg transition-all"
+                                  title="Edit Student Register No & Info"
+                                >
+                                  <Edit2 className="w-4 h-4" />
                                 </button>
                                 <button
                                   onClick={() => handleDeleteStudent(student.registerNo)}
@@ -1479,7 +1687,7 @@ export default function AdminDashboard() {
                         const initialSubjectGrades: Record<string, string> = {};
                         analysisStudents.forEach(({ semester }) => {
                           initialValues[semester.id] = semester.apc || "";
-                          semester.subjects.forEach((sub) => {
+                          (semester?.subjects || []).forEach((sub) => {
                             initialSubjectGrades[sub.id] = sub.grade || "F";
                           });
                         });
@@ -1558,10 +1766,10 @@ export default function AdminDashboard() {
                           <th className="p-2.5 text-center min-w-[72px]">Percentage</th>
                           <th className="p-2.5 text-center w-10">Rank</th>
                           {Array.from({ length: allSemestersData.maxSem }, (_, i) => i + 1).map(sem => (
-                            <>
+                            <Fragment key={`hdr-group-${sem}`}>
                               <th key={`apc-hdr-${sem}`} className="p-2.5 text-center min-w-[60px] text-sky-400">Sem {sem}<br/>APC</th>
                               <th key={`rmk-hdr-${sem}`} className="p-2.5 text-center min-w-[110px] text-amber-400">Sem {sem}<br/>Remarks</th>
-                            </>
+                            </Fragment>
                           ))}
                           <th className="p-2.5 text-center w-14"></th>
                         </tr>
@@ -1594,14 +1802,14 @@ export default function AdminDashboard() {
                                   else { remark = 'Sem Out'; remarkClass = 'text-rose-500'; }
                                 }
                                 return (
-                                  <>
+                                  <Fragment key={`sem-group-${sem}`}>
                                     <td key={`apc-${sem}`} className="p-2.5 text-center font-semibold text-sky-400">
                                       {apcNum !== null ? `${apcNum.toFixed(2)}%` : <span className="text-slate-600">—</span>}
                                     </td>
                                     <td key={`rmk-${sem}`} className={`p-2.5 text-center text-[10px] font-bold whitespace-nowrap ${remarkClass}`}>
                                       {remark || <span className="text-slate-600">—</span>}
                                     </td>
-                                  </>
+                                  </Fragment>
                                 );
                               })}
                               <td className="p-2.5 text-center">
@@ -1635,29 +1843,44 @@ export default function AdminDashboard() {
                     <thead>
                       <tr className="bg-slate-900/60 text-[10px] text-slate-500 uppercase font-bold border-b-2 border-slate-700">
                         <th className="p-2.5 text-center w-10">#</th>
-                        <th className="p-2.5 min-w-[120px]">Reg No</th>
-                        <th className="p-2.5 min-w-[150px]">Name</th>
+                        <th className="p-2.5 min-w-[120px] cursor-pointer select-none hover:text-slate-200" onClick={() => handleSort("regNo")}>
+                          Reg No {renderSortIndicator("regNo")}
+                        </th>
+                        <th className="p-2.5 min-w-[150px] cursor-pointer select-none hover:text-slate-200" onClick={() => handleSort("name")}>
+                          Name {renderSortIndicator("name")}
+                        </th>
                         {analysisSubjects.map(sub => (
-                          <th key={sub.code} className="p-2.5 text-center min-w-[70px]" title={sub.mergedNames ? sub.mergedNames.join(', ') : (sub.name.split(' - ')[1] || sub.name)}>
-                            {sub.code}
+                          <th
+                            key={sub.code}
+                            className="p-2.5 text-center min-w-[70px] cursor-pointer select-none hover:text-slate-200"
+                            title={sub.mergedNames ? sub.mergedNames.join(', ') : (sub.name.split(' - ')[1] || sub.name)}
+                            onClick={() => handleSort(sub.code)}
+                          >
+                            {sub.code} {renderSortIndicator(sub.code)}
                           </th>
                         ))}
-                        <th className="p-2.5 text-center min-w-[72px]">Grade</th>
-                        <th className="p-2.5 text-center min-w-[72px]">SGPA</th>
-                        <th className="p-2.5 text-center min-w-[120px]" title="Attendance, Progress, and Conduct">APC</th>
+                        <th className="p-2.5 text-center min-w-[72px] cursor-pointer select-none hover:text-slate-200" onClick={() => handleSort("grade")}>
+                          Grade {renderSortIndicator("grade")}
+                        </th>
+                        <th className="p-2.5 text-center min-w-[72px] cursor-pointer select-none hover:text-slate-200" onClick={() => handleSort("sgpa")}>
+                          SGPA {renderSortIndicator("sgpa")}
+                        </th>
+                        <th className="p-2.5 text-center min-w-[120px] cursor-pointer select-none hover:text-slate-200" title="Attendance, Progress, and Conduct" onClick={() => handleSort("apc")}>
+                          APC {renderSortIndicator("apc")}
+                        </th>
                         <th className="p-2.5 text-center w-14"></th>
                       </tr>
                     </thead>
                     <tbody>
-                      {analysisStudents.map(({ student, semester }, idx) => {
-                        const gradeMap = new Map(semester.subjects.map(s => [s.subjectCode, s.grade]));
+                      {sortedAnalysisStudents.map(({ student, semester }, idx) => {
+                        const gradeMap = new Map((semester?.subjects || []).map(s => [s.subjectCode, s.grade]));
                         return (
                           <tr key={student.id} className="border-b border-slate-800/30 last:border-0">
                             <td className="p-2.5 text-center font-semibold text-slate-400">{idx + 1}</td>
                             <td className="p-2.5 font-semibold text-indigo-400 whitespace-nowrap">{student.registerNo}</td>
                             <td className="p-2.5 text-slate-200 font-medium">{student.name}</td>
                              {analysisSubjects.map(sub => {
-                              const matchedSubject = semester.subjects.find(s => 
+                              const matchedSubject = (semester?.subjects || []).find(s => 
                                 sub.mergedCodes ? sub.mergedCodes.includes(s.subjectCode) : s.subjectCode === sub.code
                               );
                               
@@ -1928,6 +2151,14 @@ export default function AdminDashboard() {
             </div>
           )}
 
+          {activeTab === 'score-cards' && (
+            <ScorecardBuilder
+              students={students as any}
+              availableBatches={uniqueBatches}
+              currentBatch={selectedBatch}
+              onBatchChange={setSelectedBatch}
+            />
+          )}
         </main>
       </div>
 
@@ -2163,6 +2394,101 @@ export default function AdminDashboard() {
               </button>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* Edit Student Profile Modal */}
+      {editingStudent && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
+          <div className="glass-panel w-full max-w-md rounded-2xl p-6 border border-slate-700 space-y-5 shadow-2xl">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <h3 className="font-extrabold text-base text-slate-100 flex items-center gap-2">
+                <Edit2 className="w-5 h-5 text-indigo-400" />
+                Edit Student Profile
+              </h3>
+              <button
+                onClick={() => setEditingStudent(null)}
+                className="text-slate-400 hover:text-slate-200"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveStudentEdit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">
+                  Register Number
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editRegisterNo}
+                  onChange={e => setEditRegisterNo(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700/80 rounded-xl py-2 px-3 text-slate-100 font-bold focus:outline-none focus:border-indigo-500 text-sm"
+                  placeholder="e.g. SIAYBCA001"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">
+                  Student Full Name
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editName}
+                  onChange={e => setEditName(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700/80 rounded-xl py-2 px-3 text-slate-100 font-semibold focus:outline-none focus:border-indigo-500 text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">
+                  Batch Name
+                </label>
+                <input
+                  type="text"
+                  value={editBatch}
+                  onChange={e => setEditBatch(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700/80 rounded-xl py-2 px-3 text-slate-100 text-sm focus:outline-none focus:border-indigo-500"
+                  placeholder="e.g. 2024-2028"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1 flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5 text-indigo-400" />
+                  Date of Birth (DOB) Calendar
+                </label>
+                <input
+                  type="date"
+                  value={editDob}
+                  onChange={e => setEditDob(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700/80 rounded-xl py-2 px-3 text-slate-100 text-sm focus:outline-none focus:border-indigo-500 font-semibold cursor-pointer date-input-picker"
+                />
+                <span className="text-[10px] text-slate-500 mt-1 block">
+                  Selecting a date updates the student's default login password to their DOB.
+                </span>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingStudent(null)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingStudentEdit}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-md disabled:opacity-50"
+                >
+                  {savingStudentEdit ? "Saving..." : "Save Changes"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

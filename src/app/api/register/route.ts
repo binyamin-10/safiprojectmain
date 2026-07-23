@@ -42,6 +42,7 @@ export async function POST(request: Request) {
         registerNo: regNoTrimmed,
         name: nameTrimmed,
         password: hashedPassword,
+        dob: password.trim(),
         role: "STUDENT",
         batch: batch ? batch.trim() : null,
       },

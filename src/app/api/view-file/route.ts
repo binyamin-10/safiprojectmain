@@ -21,14 +21,74 @@ export async function GET(request: Request) {
       return new NextResponse("Invalid URL domain", { status: 400 });
     }
 
+    let targetUrl = url;
+
+    // Fix double-URL encoding issue (%2520 -> %20)
+    while (targetUrl.includes("%25")) {
+      try {
+        targetUrl = decodeURIComponent(targetUrl);
+      } catch (e) {
+        break;
+      }
+    }
+
     // Fetch the blob using the server-side read/write token
-    const blobResponse = await fetch(url, {
+    let blobResponse = await fetch(targetUrl, {
       headers: {
         Authorization: `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}`,
       },
     });
 
+    // Fallback: If 404, try decodeURI or re-encode URI in case spaces or special characters mismatched
+    if (!blobResponse.ok && blobResponse.status === 404) {
+      try {
+        const decoded = decodeURI(targetUrl);
+        if (decoded !== targetUrl) {
+          const res2 = await fetch(decoded, {
+            headers: {
+              Authorization: `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}`,
+            },
+          });
+          if (res2.ok) {
+            blobResponse = res2;
+          }
+        }
+      } catch (e) {}
+    }
+
+    if (!blobResponse.ok && blobResponse.status === 404) {
+      try {
+        const reEncoded = encodeURI(decodeURI(targetUrl));
+        if (reEncoded !== targetUrl) {
+          const res3 = await fetch(reEncoded, {
+            headers: {
+              Authorization: `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}`,
+            },
+          });
+          if (res3.ok) {
+            blobResponse = res3;
+          }
+        }
+      } catch (e) {}
+    }
+
     if (!blobResponse.ok) {
+      if (blobResponse.status === 404) {
+        return new NextResponse(
+          `<html><body style="font-family: sans-serif; padding: 2rem; text-align: center; color: #1e293b;">
+            <h2 style="color: #e11d48;">File Not Found (404)</h2>
+            <p>The requested document could not be found in cloud storage.</p>
+            <p style="color: #64748b; font-size: 0.9rem; max-width: 500px; margin: 1rem auto; line-height: 1.5;">
+              This happens when the file was rejected/deleted by an admin or replaced during a re-upload.<br><br>
+              <strong>How to fix:</strong> Ask the student to re-upload their marksheet PDF in their Student Portal (Semesters tab).
+            </p>
+          </body></html>`,
+          {
+            status: 404,
+            headers: { "Content-Type": "text/html" },
+          }
+        );
+      }
       return new NextResponse("Failed to retrieve file from storage", {
         status: blobResponse.status,
       });

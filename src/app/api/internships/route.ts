@@ -65,8 +65,9 @@ export async function POST(request: Request) {
 
     const userId = (session.user as any).id;
 
-    // Upload certificate to Vercel Blob
-    const uniqueFilename = `internship-${Date.now()}-${Math.round(Math.random() * 1e9)}-${file.name}`;
+    // Upload certificate to Vercel Blob (sanitize filename to avoid space/encoding issues)
+    const sanitizedOriginalName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_");
+    const uniqueFilename = `internship-${Date.now()}-${Math.round(Math.random() * 1e9)}-${sanitizedOriginalName}`;
     const blob = await put(uniqueFilename, file, { access: 'private' });
     const fileUrl = blob.url;
 

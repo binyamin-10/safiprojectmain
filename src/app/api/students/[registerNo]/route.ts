@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { del } from "@vercel/blob";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -170,6 +171,29 @@ export async function PUT(
         { success: false, message: "Semester report not found." },
         { status: 404 }
       );
+    }
+
+    if (isVerified === false) {
+      if (report.fileUrl) {
+        try {
+          await del(report.fileUrl);
+        } catch (e) {
+          console.warn("Failed to delete blob from vercel:", e);
+        }
+      }
+      await prisma.semesterReport.update({
+        where: { id: report.id },
+        data: {
+          isRejected: true,
+          isVerified: false,
+          fileUrl: null,
+          fileName: null,
+        } as any,
+      });
+      return NextResponse.json({
+        success: true,
+        message: `Semester ${semesterNumber} marks report rejected.`,
+      });
     }
 
     await prisma.semesterReport.update({

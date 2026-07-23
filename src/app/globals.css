@@ -44,8 +44,9 @@
 }
 
 body {
-  background-color: #f0faf5; /* cache invalidation trigger */
-  background-image: 
+  background-color: #f0faf5;
+  /* cache invalidation trigger */
+  background-image:
     radial-gradient(at 0% 0%, rgba(27, 212, 136, 0.08) 0px, transparent 50%),
     radial-gradient(at 100% 0%, rgba(13, 127, 88, 0.06) 0px, transparent 50%),
     radial-gradient(at 50% 100%, rgba(16, 185, 129, 0.04) 0px, transparent 50%);
@@ -95,26 +96,35 @@ body {
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
+
 .scrollbar-hide {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
 
 /* Inputs and Forms: Modern Focus Indicator */
-input, select, textarea {
+input,
+select,
+textarea {
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
-input:focus, select:focus, textarea:focus {
+
+input:focus,
+select:focus,
+textarea:focus {
   border-color: #0D7F58 !important;
   box-shadow: 0 0 0 3px rgba(13, 127, 88, 0.15) !important;
   outline: none;
 }
 
 /* Button Micro-interactions */
-button, a {
+button,
+a {
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
-button:active, a:active {
+
+button:active,
+a:active {
   transform: scale(0.97);
 }
 
@@ -124,13 +134,15 @@ button:active, a:active {
     opacity: 0;
     transform: translateY(12px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
   }
 }
 
-main, .auth-card {
+main,
+.auth-card {
   animation: fadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
@@ -232,7 +244,8 @@ main, .auth-card {
 
 /* Designing calendar indicator details */
 ::-webkit-calendar-picker-indicator {
-  filter: invert(36%) sepia(85%) saturate(442%) hue-rotate(113deg) brightness(92%) contrast(89%); /* Matches emerald theme color */
+  filter: invert(36%) sepia(85%) saturate(442%) hue-rotate(113deg) brightness(92%) contrast(89%);
+  /* Matches emerald theme color */
   padding: 4px;
   border-radius: 6px;
   transition: all 0.2s;

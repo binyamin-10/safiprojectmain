@@ -59,6 +59,32 @@ export async function PUT(request: Request) {
       );
     }
 
+    if (isVerified === false) {
+      const internshipToDelete = await (prisma as any).internship.findUnique({
+        where: { id },
+      });
+      if (internshipToDelete && internshipToDelete.fileUrl) {
+        try {
+          await del(internshipToDelete.fileUrl);
+        } catch (e) {
+          console.warn("Failed to delete internship blob from vercel:", e);
+        }
+      }
+      await (prisma as any).internship.update({
+        where: { id },
+        data: {
+          isRejected: true,
+          isVerified: false,
+          fileUrl: null,
+          fileName: null,
+        } as any,
+      });
+      return NextResponse.json({
+        success: true,
+        message: `Internship rejected.`,
+      });
+    }
+
     const internship = await (prisma as any).internship.update({
       where: { id },
       data: { isVerified },
